@@ -18,7 +18,7 @@ contract BudgetBreaker {
   address[] members;
 
   // residual claimant e.g. charitable organization
-  address residualAddress;
+  address residual;
 
   // target output in tokens
   uint256 target;
@@ -27,25 +27,25 @@ contract BudgetBreaker {
   uint256 targetShare;
 
   // in UTC milliseconds. contract must be signed by members and executed by controller before this time
-  uint256 executeByTime;
+  uint256 executionDeadline;
 
   // in UTC milliseconds. contract can only be completed by controller after this time
-  uint256 completionTime;
+  uint256 completionDeadline;
 
   // number of team members
   uint8 totalMembers;
 
   // in UTC milliseconds. contract created at this time
-  uint256 public createdTime = block.timestamp * 1000;
+  uint256 public creationTime = block.timestamp * 1000;
 
   constructor(
     address _token,
-    address _controller, address _residualAddress, address[] memory _members,
+    address _controller, address _residual, address[] memory _members,
     uint256 _target, uint256 _targetShare,
-    uint256 _executeByTime, uint256 _completionTime
+    uint256 _executionDeadline, uint256 _completionDeadline
   ) {
-    require(block.timestamp * 1000 < _executeByTime, 'Execution deadline must be after creation time.');
-    require(_executeByTime < _completionTime, 'Completion deadline must be after execution deadline.');
+    require(block.timestamp * 1000 < _executionDeadline, 'Execution deadline must be after creation time.');
+    require(_executionDeadline < _completionDeadline, 'Completion deadline must be after execution deadline.');
 
     totalMembers = uint8(_members.length);
 
@@ -54,14 +54,14 @@ contract BudgetBreaker {
     token = IERC20(_token);
 
     controller = _controller;
-    residualAddress = _residualAddress;
+    residual = _residual;
     members = _members;
 
     target = _target;
     targetShare = _targetShare;
 
-    executeByTime = _executeByTime;
-    completionTime = _completionTime;
+    executionDeadline = _executionDeadline;
+    completionDeadline = _completionDeadline;
 
     for (uint8 i = 0; i < totalMembers; i++) {
       memberStates[members[i]] = MemberState.NOT_SIGNED;
@@ -72,22 +72,22 @@ contract BudgetBreaker {
     return token.balanceOf(address(this));
   }
 
-  function sign() onlyMembers requireNotExecuted before(executeByTime) external {
+  function sign() onlyMembers requireNotExecuted before(executionDeadline) external {
     memberStates[tx.origin] = MemberState.SIGNED;
   }
 
-  function execute() onlyFrom(controller) requireNotExecuted requireAllSigned before(executeByTime) external {
+  function execute() onlyFrom(controller) requireNotExecuted requireAllSigned before(executionDeadline) external {
     contractState = ContractState.EXECUTORY;
   }
 
-  function complete() onlyFrom(controller) requireExecutory since(completionTime) external {
+  function complete() onlyFrom(controller) requireExecutory since(completionDeadline) external {
     if (token.balanceOf(address(this)) >= target) {
       for (uint i = 0; i < totalMembers; i++) {
         token.transfer(members[i], targetShare);
       }
     }
 
-    token.transfer(residualAddress, token.balanceOf(address(this)));
+    token.transfer(residual, token.balanceOf(address(this)));
 
     contractState = ContractState.DISBURSED;
   }
